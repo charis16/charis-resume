@@ -5,6 +5,7 @@ import {
   validateAdminSessionToken,
 } from "@/data/admin-auth-store";
 import { LoginForm } from "./LoginForm";
+import { ToastTrigger } from "@/components/ui/Toast";
 
 type AdminLoginPageProps = {
   searchParams?:
@@ -25,6 +26,14 @@ export default async function AdminLoginPage({
 
   return (
     <main className='mx-auto w-full max-w-[var(--container-max)] px-[var(--gutter)] py-10 max-md:px-[var(--margin-mobile)]'>
+      <ToastTrigger
+        toastKey={error ? "admin-login-error" : ""}
+        toast={
+          error
+            ? { variant: "error", message: "Username / password salah." }
+            : null
+        }
+      />
       <div className='glass-card mx-auto max-w-lg rounded-2xl border border-outline-variant/30 p-6 shadow-card md:p-8'>
         <div className='flex flex-col gap-1'>
           <h1 className='text-xl font-bold text-on-surface'>Admin Login</h1>

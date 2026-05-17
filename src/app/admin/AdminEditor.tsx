@@ -7,6 +7,7 @@ import {
   type Experience,
   type ProfileData,
 } from "@/data/profile";
+import { useToast } from "@/components/ui/Toast";
 import Image from "next/image";
 import { Loader2, X } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -78,6 +79,7 @@ function removeAt<T>(items: T[], index: number): T[] {
 }
 
 export function AdminEditor({ initialProfile }: AdminEditorProps) {
+  const toast = useToast();
   const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [contactEmail, setContactEmail] = useState(() =>
     getEmailFromLinks(initialProfile.links),
@@ -207,32 +209,41 @@ export function AdminEditor({ initialProfile }: AdminEditorProps) {
     }));
   }, []);
 
-  const uploadAvatar = useCallback(async (file: File) => {
-    setUploadState({ status: "uploading" });
-    try {
-      const form = new FormData();
-      form.set("file", file);
-      const res = await fetch("/api/admin/avatar", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await res.json().catch(() => null)) as {
-        ok?: boolean;
-        avatarUrl?: string;
-        error?: string;
-      } | null;
-      if (!res.ok || !data?.ok || !data.avatarUrl) {
-        throw new Error(data?.error ?? `Gagal upload (HTTP ${res.status})`);
+  const uploadAvatar = useCallback(
+    async (file: File) => {
+      setUploadState({ status: "uploading" });
+      try {
+        const form = new FormData();
+        form.set("file", file);
+        const res = await fetch("/api/admin/avatar", {
+          method: "POST",
+          body: form,
+        });
+        const data = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          avatarUrl?: string;
+          error?: string;
+        } | null;
+        if (!res.ok || !data?.ok || !data.avatarUrl) {
+          throw new Error(data?.error ?? `Gagal upload (HTTP ${res.status})`);
+        }
+        setProfile((prev) => ({ ...prev, avatarUrl: data.avatarUrl! }));
+        setUploadState({ status: "idle" });
+        toast.push({
+          variant: "success",
+          message: "Foto profil berhasil diupload.",
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Gagal upload";
+        setUploadState({
+          status: "error",
+          message,
+        });
+        toast.push({ variant: "error", message });
       }
-      setProfile((prev) => ({ ...prev, avatarUrl: data.avatarUrl! }));
-      setUploadState({ status: "idle" });
-    } catch (e) {
-      setUploadState({
-        status: "error",
-        message: e instanceof Error ? e.message : "Gagal upload",
-      });
-    }
-  }, []);
+    },
+    [toast],
+  );
 
   const save = useCallback(async () => {
     setSaveState({ status: "saving" });
@@ -266,13 +277,16 @@ export function AdminEditor({ initialProfile }: AdminEditorProps) {
 
       setProfile(payload);
       setSaveState({ status: "saved", savedAt: Date.now() });
-    } catch (e) {
-      setSaveState({
-        status: "error",
-        message: e instanceof Error ? e.message : "Gagal menyimpan",
+      toast.push({
+        variant: "success",
+        message: "Perubahan berhasil disimpan.",
       });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Gagal menyimpan";
+      setSaveState({ status: "error", message });
+      toast.push({ variant: "error", message });
     }
-  }, [contactEmail, contactLinkedIn, profile]);
+  }, [contactEmail, contactLinkedIn, profile, toast]);
 
   return (
     <div className='space-y-6'>
