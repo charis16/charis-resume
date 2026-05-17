@@ -42,10 +42,10 @@ export function TopNav({ name, role, hireHref, locale }: TopNavProps) {
             <span className='text-lg font-bold text-white'>M</span>
           </div>
           <div className='min-w-0'>
-            <span className='block truncate text-[15px] font-bold leading-none text-primary-container'>
+            <span className='block truncate text-[14px] font-bold leading-none text-primary-container'>
               {name}
             </span>
-            <span className='text-[10px] font-bold uppercase tracking-widest text-on-surface-variant max-[360px]:hidden'>
+            <span className='block truncate whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.22em] text-on-surface-variant max-[360px]:hidden'>
               {role}
             </span>
           </div>
