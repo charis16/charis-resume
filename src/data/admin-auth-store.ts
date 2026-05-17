@@ -12,16 +12,49 @@ type AdminAuth = {
 };
 
 const AUTH_KEY = "resume:adminAuth";
+const BLOB_PATH = "resume/admin-auth.json";
+const SUPABASE_AUTH_ID = "default";
 
-function isKvEnabled(): boolean {
-  if (process.env.RESUME_STORE === "file") return false;
-  if (process.env.RESUME_STORE === "kv") return true;
-  return Boolean(process.env.KV_REST_API_URL);
+type StoreMode = "file" | "blob" | "kv" | "supabase";
+
+function storeMode(): StoreMode {
+  const mode = process.env.RESUME_STORE;
+  if (
+    mode === "file" ||
+    mode === "blob" ||
+    mode === "kv" ||
+    mode === "supabase"
+  )
+    return mode;
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+    return "supabase";
+  if (process.env.BLOB_READ_WRITE_TOKEN) return "blob";
+  if (process.env.KV_REST_API_URL) return "kv";
+  return "file";
 }
 
 async function getKvClient() {
   const mod = await import("@vercel/kv");
   return mod.kv;
+}
+
+async function getBlobClient() {
+  const mod = await import("@vercel/blob");
+  return { get: mod.get, put: mod.put };
+}
+
+async function getSupabaseAdmin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Supabase belum dikonfigurasi. Set SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY.",
+    );
+  }
+  const mod = await import("@supabase/supabase-js");
+  return mod.createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 function isString(value: unknown): value is string {
@@ -50,15 +83,8 @@ async function readAuthFile(): Promise<AdminAuth> {
   return parsed;
 }
 
-export async function getAdminUsername(): Promise<string> {
-  const auth = await readAuth();
-  return auth.username;
-}
-
 async function writeAuthFile(next: AdminAuth): Promise<void> {
-  if (!isAdminAuth(next)) {
-    throw new Error("Invalid admin auth payload");
-  }
+  if (!isAdminAuth(next)) throw new Error("Invalid admin auth payload");
   const { promises: fs } = await import("fs");
   const path = await import("path");
   const authPath = path.join(process.cwd(), "src", "data", "admin-auth.json");
@@ -100,6 +126,41 @@ async function hashPassword(password: string, salt: string): Promise<string> {
   return key.toString("hex");
 }
 
+async function writeAuth(next: AdminAuth): Promise<void> {
+  if (!isAdminAuth(next)) throw new Error("Invalid admin auth payload");
+  if (storeMode() === "supabase") {
+    const supabase = await getSupabaseAdmin();
+    const { error } = await supabase.from("resume_admin_auth").upsert(
+      {
+        id: SUPABASE_AUTH_ID,
+        username: next.username,
+        password_hash: next.passwordHash,
+        salt: next.salt,
+        secret: next.secret,
+      },
+      { onConflict: "id" },
+    );
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (storeMode() === "blob") {
+    const blob = await getBlobClient();
+    await blob.put(BLOB_PATH, `${JSON.stringify(next, null, 2)}\n`, {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json",
+    });
+    return;
+  }
+  if (storeMode() === "kv") {
+    const kv = await getKvClient();
+    await kv.set(AUTH_KEY, next);
+    return;
+  }
+  await writeAuthFile(next);
+}
+
 async function bootstrapAuth(): Promise<AdminAuth> {
   const username = (
     process.env.ADMIN_INIT_USERNAME ??
@@ -111,6 +172,7 @@ async function bootstrapAuth(): Promise<AdminAuth> {
     process.env.ADMIN_PASSWORD ??
     ""
   ).trim();
+
   if (!username || !password) {
     throw new Error(
       "Admin auth belum dikonfigurasi. Set ADMIN_INIT_USERNAME dan ADMIN_INIT_PASSWORD di environment variables.",
@@ -126,23 +188,59 @@ async function bootstrapAuth(): Promise<AdminAuth> {
 }
 
 async function readAuth(): Promise<AdminAuth> {
-  if (isKvEnabled()) {
+  if (storeMode() === "supabase") {
+    const supabase = await getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("resume_admin_auth")
+      .select("username,password_hash,salt,secret")
+      .eq("id", SUPABASE_AUTH_ID)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const row = data as {
+      username?: unknown;
+      password_hash?: unknown;
+      salt?: unknown;
+      secret?: unknown;
+    } | null;
+    const mapped: AdminAuth | null = row
+      ? {
+          username: String(row.username ?? ""),
+          passwordHash: String(row.password_hash ?? ""),
+          salt: String(row.salt ?? ""),
+          secret: String(row.secret ?? ""),
+        }
+      : null;
+    if (mapped && isAdminAuth(mapped)) return mapped;
+    return await bootstrapAuth();
+  }
+
+  if (storeMode() === "blob") {
+    const blob = await getBlobClient();
+    const res = await blob.get(BLOB_PATH, {
+      access: "private",
+      useCache: false,
+    });
+    if (res?.stream) {
+      const text = await new Response(res.stream).text();
+      const parsed = JSON.parse(text) as unknown;
+      if (isAdminAuth(parsed)) return parsed;
+    }
+    return await bootstrapAuth();
+  }
+
+  if (storeMode() === "kv") {
     const kv = await getKvClient();
     const fromKv = await kv.get<unknown>(AUTH_KEY);
     if (isAdminAuth(fromKv)) return fromKv;
     return await bootstrapAuth();
   }
+
   return await readAuthFile();
 }
 
-async function writeAuth(next: AdminAuth): Promise<void> {
-  if (!isAdminAuth(next)) throw new Error("Invalid admin auth payload");
-  if (isKvEnabled()) {
-    const kv = await getKvClient();
-    await kv.set(AUTH_KEY, next);
-    return;
-  }
-  await writeAuthFile(next);
+export async function getAdminUsername(): Promise<string> {
+  const auth = await readAuth();
+  return auth.username;
 }
 
 export async function verifyAdminCredentials(

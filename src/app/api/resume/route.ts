@@ -17,6 +17,18 @@ function initials(name: string): string {
 
 async function fetchImageBuffer(url: string): Promise<Buffer | null> {
   try {
+    if (url.startsWith("/")) {
+      const { promises: fs } = await import("fs");
+      const path = await import("path");
+      const publicDir = path.join(process.cwd(), "public");
+      const target = path.join(publicDir, url.replaceAll(/^\/+/, ""));
+      const normalizedPublic = path.normalize(publicDir + path.sep);
+      const normalizedTarget = path.normalize(target);
+      if (!normalizedTarget.startsWith(normalizedPublic)) return null;
+      const buf = await fs.readFile(normalizedTarget);
+      if (buf.byteLength > 2_500_000) return null;
+      return buf;
+    }
     const res = await fetch(url);
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") ?? "";

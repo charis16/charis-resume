@@ -7,6 +7,7 @@ import {
   type Experience,
   type ProfileData,
 } from "@/data/profile";
+import Image from "next/image";
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
 
@@ -18,6 +19,11 @@ type SaveState =
   | { status: "idle" }
   | { status: "saving" }
   | { status: "saved"; savedAt: number }
+  | { status: "error"; message: string };
+
+type UploadState =
+  | { status: "idle" }
+  | { status: "uploading" }
   | { status: "error"; message: string };
 
 function parseLines(text: string): string[] {
@@ -81,6 +87,9 @@ export function AdminEditor({ initialProfile }: AdminEditorProps) {
   );
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [skillDraft, setSkillDraft] = useState("");
+  const [uploadState, setUploadState] = useState<UploadState>({
+    status: "idle",
+  });
 
   const addSkill = useCallback((raw: string) => {
     const nextValue = raw.trim();
@@ -198,6 +207,33 @@ export function AdminEditor({ initialProfile }: AdminEditorProps) {
     }));
   }, []);
 
+  const uploadAvatar = useCallback(async (file: File) => {
+    setUploadState({ status: "uploading" });
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const res = await fetch("/api/admin/avatar", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        avatarUrl?: string;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.ok || !data.avatarUrl) {
+        throw new Error(data?.error ?? `Gagal upload (HTTP ${res.status})`);
+      }
+      setProfile((prev) => ({ ...prev, avatarUrl: data.avatarUrl! }));
+      setUploadState({ status: "idle" });
+    } catch (e) {
+      setUploadState({
+        status: "error",
+        message: e instanceof Error ? e.message : "Gagal upload",
+      });
+    }
+  }, []);
+
   const save = useCallback(async () => {
     setSaveState({ status: "saving" });
 
@@ -240,6 +276,55 @@ export function AdminEditor({ initialProfile }: AdminEditorProps) {
 
   return (
     <div className='space-y-6'>
+      <section className='rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/70 p-5'>
+        <div className='flex flex-col gap-1'>
+          <h2 className='text-sm font-bold tracking-wider text-on-surface'>
+            Foto Profile
+          </h2>
+          <p className='text-sm text-on-surface-variant'>
+            Upload gambar untuk foto profil.
+          </p>
+        </div>
+
+        <div className='mt-4 flex flex-col gap-4 md:flex-row md:items-center'>
+          <div className='h-16 w-16 overflow-hidden rounded-full border border-outline-variant/30 bg-surface-container-lowest'>
+            {profile.avatarUrl ? (
+              <Image
+                src={profile.avatarUrl}
+                alt='Avatar'
+                width={64}
+                height={64}
+                unoptimized
+                className='h-full w-full object-cover'
+              />
+            ) : (
+              <div className='flex h-full w-full items-center justify-center text-xs font-semibold text-on-surface-variant'>
+                -
+              </div>
+            )}
+          </div>
+
+          <div className='flex flex-1 flex-col gap-2'>
+            <input
+              type='file'
+              accept='image/*'
+              className='block w-full text-sm'
+              onChange={(e) => {
+                const f = e.currentTarget.files?.[0];
+                e.currentTarget.value = "";
+                if (f) uploadAvatar(f);
+              }}
+              disabled={uploadState.status === "uploading"}
+            />
+            {uploadState.status === "uploading" ? (
+              <p className='text-sm text-on-surface-variant'>Mengupload...</p>
+            ) : uploadState.status === "error" ? (
+              <p className='text-sm text-error'>{uploadState.message}</p>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       <section
         id='contact'
         className='rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/70 p-5'>
