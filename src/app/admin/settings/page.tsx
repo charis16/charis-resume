@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ADMIN_COOKIE, validateAdminSessionToken } from "@/data/admin-auth-store";
+import { ChangePasswordForm } from "./ChangePasswordForm";
 
 type AdminSettingsPageProps = {
   searchParams?:
@@ -64,37 +65,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </div>
             ) : null}
 
-            <form action="/api/admin/change-password" method="post" className="mt-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-on-surface-variant">Password Baru</span>
-                  <input
-                    className="h-10 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 text-sm outline-none focus:border-primary-container"
-                    name="newPassword"
-                    type="password"
-                    autoComplete="new-password"
-                  />
-                </label>
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-on-surface-variant">
-                    Konfirmasi Password
-                  </span>
-                  <input
-                    className="h-10 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 text-sm outline-none focus:border-primary-container"
-                    name="confirmPassword"
-                    type="password"
-                    autoComplete="new-password"
-                  />
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="mt-4 h-10 rounded-xl bg-primary-container px-4 text-sm font-bold text-white shadow-sm"
-              >
-                Simpan
-              </button>
-            </form>
+            <ChangePasswordForm />
           </section>
         </div>
       </div>
