@@ -1,9 +1,15 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { ADMIN_COOKIE, validateAdminSessionToken } from "@/data/admin-auth-store";
+import {
+  ADMIN_COOKIE,
+  validateAdminSessionToken,
+} from "@/data/admin-auth-store";
 import { getProfile, saveProfile } from "@/data/profile-store";
 
 export const runtime = "nodejs";
+
+const SUPABASE_BUCKET_ID = "resume";
+const MAX_IMAGE_BYTES = 4_000_000;
 
 async function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -21,30 +27,24 @@ async function getSupabaseAdmin() {
 
 async function ensureSupabaseBucket() {
   const supabase = await getSupabaseAdmin();
-  const bucketId = "resume";
+  const buckets = await supabase.storage.listBuckets();
+  if (buckets.error) throw new Error(buckets.error.message);
 
-  const existing = await supabase.storage.getBucket(bucketId);
-  if (existing.error) {
-    const created = await supabase.storage.createBucket(bucketId, {
+  const existing = buckets.data?.find((b) => b.id === SUPABASE_BUCKET_ID);
+  if (!existing) {
+    const created = await supabase.storage.createBucket(SUPABASE_BUCKET_ID, {
       public: true,
-      fileSizeLimit: 4_000_000,
+      fileSizeLimit: MAX_IMAGE_BYTES,
       allowedMimeTypes: ["image/*"],
     });
-    if (created.error) {
-      throw new Error(created.error.message);
-    }
-    return supabase;
-  }
-
-  if (existing.data && existing.data.public === false) {
-    const updated = await supabase.storage.updateBucket(bucketId, {
+    if (created.error) throw new Error(created.error.message);
+  } else if (existing.public === false) {
+    const updated = await supabase.storage.updateBucket(SUPABASE_BUCKET_ID, {
       public: true,
-      fileSizeLimit: 4_000_000,
+      fileSizeLimit: MAX_IMAGE_BYTES,
       allowedMimeTypes: ["image/*"],
     });
-    if (updated.error) {
-      throw new Error(updated.error.message);
-    }
+    if (updated.error) throw new Error(updated.error.message);
   }
 
   return supabase;
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    if (arrayBuffer.byteLength > 4_000_000) {
+    if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) {
       return Response.json(
         { ok: false, error: "Ukuran gambar maksimal 4MB" },
         { status: 400 },
@@ -121,13 +121,15 @@ export async function POST(request: Request) {
       const supabase = await ensureSupabaseBucket();
       const objectPath = `avatar/${filename}`;
       const { error } = await supabase.storage
-        .from("resume")
+        .from(SUPABASE_BUCKET_ID)
         .upload(objectPath, Buffer.from(arrayBuffer), {
           contentType: file.type,
           upsert: true,
         });
       if (error) throw new Error(error.message);
-      const { data } = supabase.storage.from("resume").getPublicUrl(objectPath);
+      const { data } = supabase.storage
+        .from(SUPABASE_BUCKET_ID)
+        .getPublicUrl(objectPath);
       if (!data.publicUrl) throw new Error("Gagal mendapatkan public URL");
       avatarUrl = data.publicUrl;
     } else if (useBlob) {
