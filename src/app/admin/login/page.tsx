@@ -4,6 +4,7 @@ import {
   ADMIN_COOKIE,
   validateAdminSessionToken,
 } from "@/data/admin-auth-store";
+import { LoginForm } from "./LoginForm";
 
 type AdminLoginPageProps = {
   searchParams?:
@@ -40,39 +41,7 @@ export default async function AdminLoginPage({
           </div>
         ) : null}
 
-        <form
-          action='/api/admin/login'
-          method='post'
-          className='mt-6 space-y-4'>
-          <label className='flex flex-col gap-2'>
-            <span className='text-xs font-semibold text-on-surface-variant'>
-              Username
-            </span>
-            <input
-              className='h-10 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 text-sm outline-none focus:border-primary-container'
-              name='username'
-              autoComplete='username'
-            />
-          </label>
-
-          <label className='flex flex-col gap-2'>
-            <span className='text-xs font-semibold text-on-surface-variant'>
-              Password
-            </span>
-            <input
-              className='h-10 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 text-sm outline-none focus:border-primary-container'
-              name='password'
-              type='password'
-              autoComplete='current-password'
-            />
-          </label>
-
-          <button
-            type='submit'
-            className='h-11 w-full rounded-xl bg-primary-container px-5 text-sm font-bold text-white shadow-sm'>
-            Masuk
-          </button>
-        </form>
+        <LoginForm />
       </div>
     </main>
   );
