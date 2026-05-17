@@ -101,6 +101,34 @@ input[type="submit"]:not(:disabled) {
   cursor: pointer;
 }
 
+button[aria-busy="true"],
+input[type="button"][aria-busy="true"],
+input[type="submit"][aria-busy="true"] {
+  cursor: progress;
+}
+
+button[aria-busy="true"] {
+  position: relative;
+  overflow: hidden;
+  opacity: 0.75;
+}
+
+button[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.22) 45%,
+    rgba(255, 255, 255, 0.22) 55%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-120%);
+  animation: button-loading-shimmer 1.15s linear infinite;
+  pointer-events: none;
+}
+
 button:disabled,
 input[type="button"]:disabled,
 input[type="submit"]:disabled {
@@ -155,6 +183,9 @@ html {
   .reveal {
     transition: none !important;
   }
+  button[aria-busy="true"]::after {
+    animation: none !important;
+  }
   .glass-card:hover {
     transform: none;
   }
@@ -186,6 +217,15 @@ html {
   50%,
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes button-loading-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
   }
 }
 

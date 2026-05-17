@@ -8,7 +8,7 @@ import {
   type ProfileData,
 } from "@/data/profile";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 
 type AdminEditorProps = {
@@ -838,10 +838,17 @@ export function AdminEditor({ initialProfile }: AdminEditorProps) {
           onClick={save}
           disabled={saveState.status === "saving"}
           className={[
-            "h-11 rounded-xl bg-primary-container px-5 text-sm font-bold text-white shadow-sm",
+            "inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary-container px-5 text-sm font-bold text-white shadow-sm",
             saveState.status === "saving" ? "opacity-60" : "",
           ].join(" ")}>
-          {saveState.status === "saving" ? "Menyimpan..." : "Simpan Perubahan"}
+          {saveState.status === "saving" ? (
+            <>
+              <Loader2 className='h-4 w-4 animate-spin' />
+              Menyimpan...
+            </>
+          ) : (
+            "Simpan Perubahan"
+          )}
         </button>
 
         {saveState.status === "saved" ? (
