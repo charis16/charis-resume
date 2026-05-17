@@ -1,7 +1,5 @@
 import "server-only";
 
-import { promises as fs } from "fs";
-import path from "path";
 import crypto from "crypto";
 
 export const ADMIN_COOKIE = "admin_session";
@@ -13,7 +11,18 @@ type AdminAuth = {
   secret: string;
 };
 
-const AUTH_PATH = path.join(process.cwd(), "src", "data", "admin-auth.json");
+const AUTH_KEY = "resume:adminAuth";
+
+function isKvEnabled(): boolean {
+  if (process.env.RESUME_STORE === "file") return false;
+  if (process.env.RESUME_STORE === "kv") return true;
+  return Boolean(process.env.KV_REST_API_URL);
+}
+
+async function getKvClient() {
+  const mod = await import("@vercel/kv");
+  return mod.kv;
+}
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
@@ -31,16 +40,18 @@ function isAdminAuth(value: unknown): value is AdminAuth {
 }
 
 async function readAuthFile(): Promise<AdminAuth> {
-  const raw = await fs.readFile(AUTH_PATH, "utf8");
+  const { promises: fs } = await import("fs");
+  const path = await import("path");
+  const authPath = path.join(process.cwd(), "src", "data", "admin-auth.json");
+  const raw = await fs.readFile(authPath, "utf8");
   const parsed = JSON.parse(raw) as unknown;
-  if (!isAdminAuth(parsed)) {
+  if (!isAdminAuth(parsed))
     throw new Error("admin-auth.json schema is invalid");
-  }
   return parsed;
 }
 
 export async function getAdminUsername(): Promise<string> {
-  const auth = await readAuthFile();
+  const auth = await readAuth();
   return auth.username;
 }
 
@@ -48,11 +59,14 @@ async function writeAuthFile(next: AdminAuth): Promise<void> {
   if (!isAdminAuth(next)) {
     throw new Error("Invalid admin auth payload");
   }
-  const dir = path.dirname(AUTH_PATH);
+  const { promises: fs } = await import("fs");
+  const path = await import("path");
+  const authPath = path.join(process.cwd(), "src", "data", "admin-auth.json");
+  const dir = path.dirname(authPath);
   const tmp = path.join(dir, `.admin-auth.${Date.now()}.tmp`);
   const payload = `${JSON.stringify(next, null, 2)}\n`;
   await fs.writeFile(tmp, payload, "utf8");
-  await fs.rename(tmp, AUTH_PATH);
+  await fs.rename(tmp, authPath);
 }
 
 function base64UrlEncode(input: Buffer | string): string {
@@ -86,11 +100,56 @@ async function hashPassword(password: string, salt: string): Promise<string> {
   return key.toString("hex");
 }
 
+async function bootstrapAuth(): Promise<AdminAuth> {
+  const username = (
+    process.env.ADMIN_INIT_USERNAME ??
+    process.env.ADMIN_USERNAME ??
+    ""
+  ).trim();
+  const password = (
+    process.env.ADMIN_INIT_PASSWORD ??
+    process.env.ADMIN_PASSWORD ??
+    ""
+  ).trim();
+  if (!username || !password) {
+    throw new Error(
+      "Admin auth belum dikonfigurasi. Set ADMIN_INIT_USERNAME dan ADMIN_INIT_PASSWORD di environment variables.",
+    );
+  }
+
+  const salt = crypto.randomBytes(16).toString("hex");
+  const secret = crypto.randomBytes(32).toString("hex");
+  const passwordHash = await hashPassword(password, salt);
+  const auth: AdminAuth = { username, passwordHash, salt, secret };
+  await writeAuth(auth);
+  return auth;
+}
+
+async function readAuth(): Promise<AdminAuth> {
+  if (isKvEnabled()) {
+    const kv = await getKvClient();
+    const fromKv = await kv.get<unknown>(AUTH_KEY);
+    if (isAdminAuth(fromKv)) return fromKv;
+    return await bootstrapAuth();
+  }
+  return await readAuthFile();
+}
+
+async function writeAuth(next: AdminAuth): Promise<void> {
+  if (!isAdminAuth(next)) throw new Error("Invalid admin auth payload");
+  if (isKvEnabled()) {
+    const kv = await getKvClient();
+    await kv.set(AUTH_KEY, next);
+    return;
+  }
+  await writeAuthFile(next);
+}
+
 export async function verifyAdminCredentials(
   username: string,
   password: string,
 ): Promise<boolean> {
-  const auth = await readAuthFile();
+  const auth = await readAuth();
   if (username !== auth.username) return false;
   const computed = await hashPassword(password, auth.salt);
   const a = Buffer.from(computed, "hex");
@@ -104,7 +163,7 @@ type SessionPayload = {
 };
 
 async function sign(payloadB64: string): Promise<string> {
-  const auth = await readAuthFile();
+  const auth = await readAuth();
   const mac = crypto
     .createHmac("sha256", auth.secret)
     .update(payloadB64)
@@ -150,7 +209,7 @@ export async function validateAdminSessionToken(
   if (typeof payload.exp !== "number") return false;
   if (Date.now() > payload.exp) return false;
 
-  const auth = await readAuthFile();
+  const auth = await readAuth();
   return payload.u === auth.username;
 }
 
@@ -160,12 +219,12 @@ export async function setAdminPassword(newPassword: string): Promise<void> {
     throw new Error("Password minimal 8 karakter");
   }
 
-  const auth = await readAuthFile();
+  const auth = await readAuth();
   const salt = crypto.randomBytes(16).toString("hex");
   const secret = crypto.randomBytes(32).toString("hex");
   const passwordHash = await hashPassword(trimmed, salt);
 
-  await writeAuthFile({
+  await writeAuth({
     username: auth.username,
     passwordHash,
     salt,
@@ -184,7 +243,7 @@ export async function changeAdminPassword(params: {
     throw new Error("Password minimal 8 karakter");
   }
 
-  const auth = await readAuthFile();
+  const auth = await readAuth();
   if (username !== auth.username) {
     throw new Error("Unauthorized");
   }
@@ -200,7 +259,7 @@ export async function changeAdminPassword(params: {
   const secret = crypto.randomBytes(32).toString("hex");
   const passwordHash = await hashPassword(trimmed, salt);
 
-  await writeAuthFile({
+  await writeAuth({
     username: auth.username,
     passwordHash,
     salt,

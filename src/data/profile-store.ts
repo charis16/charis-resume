@@ -1,22 +1,19 @@
 import "server-only";
 
-import { promises as fs } from "fs";
-import path from "path";
 import { type ProfileData } from "@/data/profile";
+import defaultProfile from "@/data/profile.store.json";
 
-const STORE_PATH = path.join(process.cwd(), "src", "data", "profile.store.json");
+const STORE_KEY = "resume:profile";
 
-async function readJsonFile(): Promise<unknown> {
-  const raw = await fs.readFile(STORE_PATH, "utf8");
-  return JSON.parse(raw) as unknown;
+function isKvEnabled(): boolean {
+  if (process.env.RESUME_STORE === "file") return false;
+  if (process.env.RESUME_STORE === "kv") return true;
+  return Boolean(process.env.KV_REST_API_URL);
 }
 
-async function writeJsonFile(value: unknown): Promise<void> {
-  const dir = path.dirname(STORE_PATH);
-  const tmp = path.join(dir, `.profile.store.${Date.now()}.tmp`);
-  const payload = `${JSON.stringify(value, null, 2)}\n`;
-  await fs.writeFile(tmp, payload, "utf8");
-  await fs.rename(tmp, STORE_PATH);
+async function getKvClient() {
+  const mod = await import("@vercel/kv");
+  return mod.kv;
 }
 
 function isString(value: unknown): value is string {
@@ -59,17 +56,49 @@ function isProfileData(value: unknown): value is ProfileData {
   return true;
 }
 
+async function readJsonFile(): Promise<unknown> {
+  const { promises: fs } = await import("fs");
+  const path = await import("path");
+  const storePath = path.join(process.cwd(), "src", "data", "profile.store.json");
+  const raw = await fs.readFile(storePath, "utf8");
+  return JSON.parse(raw) as unknown;
+}
+
+async function writeJsonFile(value: unknown): Promise<void> {
+  const { promises: fs } = await import("fs");
+  const path = await import("path");
+  const storePath = path.join(process.cwd(), "src", "data", "profile.store.json");
+  const dir = path.dirname(storePath);
+  const tmp = path.join(dir, `.profile.store.${Date.now()}.tmp`);
+  const payload = `${JSON.stringify(value, null, 2)}\n`;
+  await fs.writeFile(tmp, payload, "utf8");
+  await fs.rename(tmp, storePath);
+}
+
 export async function getProfile(): Promise<ProfileData> {
-  const data = await readJsonFile();
-  if (!isProfileData(data)) {
+  if (isKvEnabled()) {
+    const kv = await getKvClient();
+    const fromKv = await kv.get<unknown>(STORE_KEY);
+    if (isProfileData(fromKv)) return fromKv;
+    if (isProfileData(defaultProfile)) {
+      await kv.set(STORE_KEY, defaultProfile);
+      return defaultProfile;
+    }
     throw new Error("profile.store.json schema is invalid");
   }
+  const data = await readJsonFile();
+  if (!isProfileData(data)) throw new Error("profile.store.json schema is invalid");
   return data;
 }
 
 export async function saveProfile(next: ProfileData): Promise<void> {
   if (!isProfileData(next)) {
     throw new Error("Invalid profile payload");
+  }
+  if (isKvEnabled()) {
+    const kv = await getKvClient();
+    await kv.set(STORE_KEY, next);
+    return;
   }
   await writeJsonFile(next);
 }
