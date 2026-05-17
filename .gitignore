@@ -23,12 +23,17 @@
 # misc
 .DS_Store
 *.pem
+.idea
+.vscode
+.trae
+.sandbox_home
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
 # env files (can opt-in for committing if needed)
 .env*
@@ -36,6 +41,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# app secrets (file-based auth)
+/src/data/admin-auth.json
+
+# lockfiles
+package-lock.json
+
 # typescript
 *.tsbuildinfo
-next-env.d.ts
