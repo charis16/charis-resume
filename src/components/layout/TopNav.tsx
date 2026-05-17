@@ -28,7 +28,7 @@ export function TopNav({ name, role, hireHref, locale }: TopNavProps) {
     <header className='fixed left-0 top-0 z-50 w-full pt-[calc(env(safe-area-inset-top)+10px)] md:pt-0'>
       <div
         className={[
-          "mx-auto flex h-14 max-w-[var(--container-max)] items-center justify-between gap-3 rounded-full border px-3 backdrop-blur-xl md:hidden",
+          "mx-auto flex h-14 max-w-[var(--container-max)] items-center justify-between gap-3 rounded-full border px-3 backdrop-blur-xl max-md:mx-[var(--margin-mobile)] md:hidden",
           scrolled
             ? "border-outline-variant/30 bg-white/85 shadow-sm"
             : "border-outline-variant/20 bg-white/70 shadow-none",
