@@ -2,7 +2,6 @@ import {
   Award,
   Bolt,
   BriefcaseBusiness,
-  Download,
   GraduationCap,
   Mail,
   Link2,
@@ -13,6 +12,7 @@ import { type ProfileLink } from "@/data/profile";
 import { type Locale } from "@/i18n/locale";
 import { t } from "@/i18n/messages";
 import { type ReactNode } from "react";
+import { DownloadResumeButton } from "@/components/layout/DownloadResumeButton";
 
 type SidebarProps = {
   name: string;
@@ -81,15 +81,7 @@ export function Sidebar({
           <p className='mt-3 text-[12px] italic leading-relaxed text-on-surface-variant'>
             {tagline}
           </p>
-          <a
-            href='/api/resume'
-            className='mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-primary'
-            style={{
-              background: "linear-gradient(to right, #0077b5, #005d8f)",
-            }}>
-            <Download className='h-[18px] w-[18px]' />
-            {t(locale, "downloadResume")}
-          </a>
+          <DownloadResumeButton locale={locale} />
         </div>
 
         <nav className='flex flex-col py-2'>
